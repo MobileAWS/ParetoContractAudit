@@ -1,4 +1,4 @@
-# 1 Introduction
+# 1. Introduction
 
 This document is a security audit of Pareto Network’s ERC-20 token contract supporting their decentralized ecosystem.
 
@@ -7,19 +7,18 @@ The scope of the security audit was restricted to:
 * Scan the contracts listed above for generic security issues using automated systems and manually inspecting the results.
 * Manually auditing the contracts listed above for security issues.
 
-# 2 Files Audited
+# 2. Files Audited
 
-We evaluated the Pareto ERC-20 token contract file that resides on the Ethereum Production Blockchain
-[Etherscan](https://etherscan.io/address/0xea5f88e54d982cbb0c441cde4e79bc305e5b43bc#code)
+We evaluated the Pareto ERC-20 token contract file that resides on [Etherscan](https://etherscan.io/address/0xea5f88e54d982cbb0c441cde4e79bc305e5b43bc#code)
 
-The version used for this report is
+The Githuhb version used for this report is
 [fd5c927392350d6e7dcee4549dc4a790e31d0ea1#diff-1b12214caabec7083a5d2d9c8b004846](https://github.com/ParetoNetwork/ParetoTokenContract/blob/master/ParetoERC20.sol)
 
-# 3 Disclaimer
+# 3. Disclaimer
 
 The audit makes no statements or warrants about utility of the code, safety of the code, suitability of the business model, regulatory regime for the business model, or any other statements about fitness of the contracts to purpose, or their bug free status. The audit documentation is for discussion purposes only.
 
-# 4 Executive Summary
+# 4. Executive Summary
 
 The contract implements all of the ERC-20 standard functions, events and state variables, and explicitly defines the visibility of each function. [AllCode](https://www.allcode.com) reviewed the contract from a technical perspective looking for security issues in the source code. Overall, we recommend minor feature enhancements and a few improvements which will reduce risks.
 
@@ -27,7 +26,7 @@ This token contract’s code is clean, thoughtfully writtenm and in general, wel
 
 The Pareto token contract inherits many contracts from the [OpenZeppelin](https://github.com/OpenZeppelin) codebase, which is an industry standard.
 
-# 5 Vulnerabilities
+# 5. Vulnerabilities
 
 ## 5.1 Critical Vulnerabilities
 
@@ -138,7 +137,7 @@ function transferFrom(address _from, address _to, uint _value)
 ```
 
 
-#  6 General Comments
+#  6. General Comments
 
 ##  6.1 Use of ‘approve’ Function
 
@@ -189,7 +188,7 @@ Example:
 `emit Transfer(0x00, owner, totalSupply_);`
 ```
 
-# 7 Line By Line Discussion
+# 7. Line By Line Discussion
 
 ##  7.1 Line 327
 
@@ -254,7 +253,7 @@ function approve (address _spender, uint256 _value) onlyPayloadSize(2)
     }
 ```
 
-# 8 Final Recommendation
+# 8. Final Recommendation
 
 Our final recommendation would be to pay attention to the constructor of the contract where we are supposed to use `SafeMath` library when updating `balances` mapping and fire `Transfer` event when the token balance is transferred from `owner` to `distributionAddress`.
 
