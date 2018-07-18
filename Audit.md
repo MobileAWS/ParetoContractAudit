@@ -1,10 +1,7 @@
 # Introduction
 
-On 2017-09-26, Nick Johnson performed an audit of the airswap token smart
-contract. My findings are detailed below.
+This document is a review of Pareto Network’s ERC-20 token contract supporting their decentralized ecosystem. The ParetoERC20.sol file contains 348 lines of Solidity code. All of the functions and state variables are well commented using the natspec documentation format,  which is a good standard for quickly understanding how everything is supposed to work. The contract implements all the ERC-20 standard functions, events and state variables, and explicitly defines the visibility of each function. AllCode reviewed the contract from a technical perspective looking for bugs in the codebase. Overall we recommend minor feature enhancements and a few improvements which will reduce risks. See more Below.
 
-I, Nick Johnson have no stake or vested interest in airswap or ConsenSys. This audit
-was performed under a contracted hourly rate with no other compensation.
 
 ## Authenticity
 
