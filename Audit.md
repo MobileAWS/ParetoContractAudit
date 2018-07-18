@@ -3,20 +3,26 @@
 This document is a review of Pareto Network’s ERC-20 token contract supporting their decentralized ecosystem. The `ParetoERC20.sol` file contains 348 lines of Solidity code. All of the functions and state variables are well commented using the `natspec` documentation format,  which is a good standard for quickly understanding how everything is supposed to work. The contract implements all the ERC-20 standard functions, events and state variables, and explicitly defines the visibility of each function. AllCode reviewed the contract from a technical perspective looking for bugs in the codebase. Overall we recommend minor feature enhancements and a few improvements which will reduce risks. See more Below.
 
 
-## Authenticity
+# Files Audited
 
-This document should have an attached cryptographic signature to ensure it has
-not been tampered with.  The signature can be verified using the public key from
-[Nick Johnson's keybase.io record](https://keybase.io/arachnid).
+We evaluated the Pareto ERC-20 token contract file at: https://github.com/ParetoNetwork/ParetoTokenContract/blob/master/ParetoERC20.sol
 
-## Audit Goals and Focus
+# Disclaimer
 
-### Smart Contract Best Practices
+The audit makes no statements or warrants about utility of the code, safety of the code, suitability of the business model, regulatory regime for the business model, or any other statements about fitness of the contracts to purpose, or their bug free status. The audit documentation is for discussion purposes only.
 
-This audit will evaluate whether the codebase follows the current established
-best practices for smart contract development.
+# Executive Summary
 
-### Code Correctness
+This token contract’s code is very clean, thoughtfully written and in general well architected. The contract only possess a minor vulnerability which has been described in detail in the discussion section of this audit. The code conforms closely to the documentation and specification.
+
+The Pareto token contract inherits many contracts from the OpenZeppelin codebase. In general, OpenZeppelin’s codebase is good and secure, and this is a relatively safe start.
+
+
+
+
+# Vulnerabilities
+
+## 5.1	Critical Vulnerabilities
 
 This audit will evaluate whether the code does what it is intended to do.
 
