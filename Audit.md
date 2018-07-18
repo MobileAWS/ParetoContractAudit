@@ -1,17 +1,17 @@
-# Introduction
+# 1 Introduction
 
 This document is a review of Pareto Network’s ERC-20 token contract supporting their decentralized ecosystem. The `ParetoERC20.sol` file contains 348 lines of Solidity code. All of the functions and state variables are well commented using the `natspec` documentation format,  which is a good standard for quickly understanding how everything is supposed to work. The contract implements all the ERC-20 standard functions, events and state variables, and explicitly defines the visibility of each function. AllCode reviewed the contract from a technical perspective looking for bugs in the codebase. Overall we recommend minor feature enhancements and a few improvements which will reduce risks. See more Below.
 
 
-# Files Audited
+# 2 Files Audited
 
 We evaluated the Pareto ERC-20 token contract file at: https://github.com/ParetoNetwork/ParetoTokenContract/blob/master/ParetoERC20.sol
 
-# Disclaimer
+# 3 Disclaimer
 
 The audit makes no statements or warrants about utility of the code, safety of the code, suitability of the business model, regulatory regime for the business model, or any other statements about fitness of the contracts to purpose, or their bug free status. The audit documentation is for discussion purposes only.
 
-# Executive Summary
+# 4 Executive Summary
 
 This token contract’s code is very clean, thoughtfully written and in general well architected. The contract only possess a minor vulnerability which has been described in detail in the discussion section of this audit. The code conforms closely to the documentation and specification.
 
@@ -20,21 +20,44 @@ The Pareto token contract inherits many contracts from the OpenZeppelin codebase
 
 
 
-# Vulnerabilities
+# 5 Vulnerabilities
 
-## 5.1	Critical Vulnerabilities
+## 5.1 Critical Vulnerabilities
 
-This audit will evaluate whether the code does what it is intended to do.
+There is only a single critical vulnerability in the constructor of the Pareto contract. When `_value` tokens are transferred from `owner` to `distributionAddress`, there is no firing of corresponding `Transfer` event. This absence of `Transfer` event results in unlogged transfers of tokens and poses issues of incorrect calculations when the number of token holders or number of transfers for the token contract are calculated. Both the data on `Etherscan` against `owner` and `distributionAddress` will be shown incorrect as Etherscan calculates and shows data collected from event logs. Also, as the `Transfer` event in discussion is not fired, no data is logged, and there is no existence of this record on the Ethereum blockchain.
 
-### Code Quality
+## 5.2 Moderate Vulnerabilities
 
-This audit will evaluate whether the code has been written in a way that
-ensures readability and maintainability.
+As written, the contracts are vulnerable to two common issues: a short address attack; and a double-spend attack on approvals.
 
-### Security
+### 5.2.1 Short Address Attack
 
-This audit will look for any exploitable security vulnerabilities, or other
-potential threats to either the operators of ChainLink or its users.
+Recently the Golem team discovered that an exchange wasn’t validating user-entered addresses on transfers. Due to the way `msg.data` is interpreted, it was possible to enter a shortened address, which would cause the server to construct a transfer transaction that would appear correct to server-side code, but would actually transfer a much larger amount than expected.
+
+This attack can be entirely prevented by doing a length check on `msg.data`. In the case of `transfer()`, the length should be 68:
+
+                                       `assert(msg.data.length == 68);`
+
+Vulnerable functions include all those whose last two parameters are an address, followed by a value.
+
+In ERC20 these functions include `transfer`, `transferFrom` and `approve`.
+
+A general way to implement this is with a modifier (slightly modified from the one suggested by redditor izqui9):
+
+
+
+
+                                   modifier onlyPayloadSize(uint numwords) {
+                                        assert(msg.data.length == numwords * 32 + 4);
+                                        _;
+                                   }
+
+                         function transfer(address _to, uint256 _value) onlyPayloadSize(2) { }
+
+If an exploit of this nature were to succeed, it would arguably be the fault of the exchange, or whoever else improperly constructed the oﬀending transactions. However, we believe in defense in depth. It’s easy and desirable to make tokens which cannot be stolen this way, even from poorly-coded exchanges.
+
+Further explanation of this attack is here: http://vessenes.com/the-erc20-short-address-attack-explained/
+
 
 ### Testing and testability
 
