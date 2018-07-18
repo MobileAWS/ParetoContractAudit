@@ -252,6 +252,7 @@ function approve (address _spender, uint256 _value) onlyPayloadSize(2)
     if ((_value != 0) && (allowance_of[msg.sender][_spender] != 0)) return false;
       //…
     }
+```
 
 # 8 Final Recommendation
 
