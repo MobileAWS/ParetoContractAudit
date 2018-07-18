@@ -36,7 +36,7 @@ Recently the Golem team discovered that an exchange wasn’t validating user-ent
 
 This attack can be entirely prevented by doing a length check on `msg.data`. In the case of `transfer()`, the length should be 68:
 
-                                       `assert(msg.data.length == 68);`
+                                       assert(msg.data.length == 68);
 
 Vulnerable functions include all those whose last two parameters are an address, followed by a value.
 
@@ -69,17 +69,17 @@ In general, this sort of attack is possible with functions which do not encode e
 
 It’s possible for `approve()` to enforce this behavior without API changes in the ERC20 specification:
 
-                `if ((_value != 0) && (approved[msg.sender][_spender] != 0)) return false;`
+                if ((_value != 0) && (approved[msg.sender][_spender] != 0)) return false;
 
 However, this is just an attempt to modify user behavior. If the user does attempt to change from one non-zero value to another, then the doublespend can still happen, since the attacker will set the value to zero.
 
 If desired, a nonstandard function can be added to minimize hassle for users. The issue can be fixed with minimal inconvenience by taking a change value rather than a replacement value:
 
-`function increaseApproval (address _spender, uint256 _addedValue) onlyPayloadSize(2) returns (bool success) {
-uint oldValue = approved[msg.sender][_spender];
-approved[msg.sender][_spender] = safeAdd(oldValue, _addedValue);
-return true;
-}`
+        function increaseApproval (address _spender, uint256 _addedValue) onlyPayloadSize(2) returns (bool success) {
+        uint oldValue = approved[msg.sender][_spender];
+        approved[msg.sender][_spender] = safeAdd(oldValue, _addedValue);
+        return true;
+        }
 
 Even if this function is added, it’s important to keep the original for compatibility with the ERC20 specification.
 
@@ -107,28 +107,28 @@ An example of the potential for loss by leaving this open is the EOS token smart
 
 An example of implementing both the above recommendations would be to create the following modifier; validating that the "to" address is neither 0x0 nor the smart contract's own address:
 
-`modifier validDestination( address to ) {
-        require(to != address(0x0));
-        require(to != address(this) );
-        _;
-    }`
+                              modifier validDestination( address to ) {
+                                      require(to != address(0x0));
+                                      require(to != address(this) );
+                                      _;
+                                  }
 
 The modifier should then be applied to the "transfer" and "transferFrom" methods:
 
-   `function transfer(address _to, uint _value)
-        validDestination(_to)
-        returns (bool) 
-    {
-        (... your logic ...)
-    }
+               function transfer(address _to, uint _value)
+                    validDestination(_to)
+                    returns (bool) 
+                {
+                    (... your logic ...)
+                }
 
-    function transferFrom(address _from, address _to, uint _value)
-        validDestination(_to)
-        returns (bool) 
-    {
-        (... your logic ...)
-    }
-`
+                function transferFrom(address _from, address _to, uint _value)
+                    validDestination(_to)
+                    returns (bool) 
+                {
+                    (... your logic ...)
+                }
+
 
 #  6 General Comments
 
@@ -138,14 +138,14 @@ As mentioned earlier, the double spending problem resulting from the use `approv
 
 
  
-             ` function approve (address _spender, uint256 _value)  returns (bool success) {
+              function approve (address _spender, uint256 _value)  returns (bool success) {
 
               if ((_value != 0) && (allowance_of[msg.sender][_spender] != 0)) return false;
 
               //...
 
               }
-              `
+              
 
 ##  6.2 Reclaiming Stranded Tokens
 
@@ -161,7 +161,7 @@ It is very rare but possible to see Ether sent to a contract that is not payable
 
 The Pareto token contract inherits a contract from OpenZepplin called `HasNoEther` which defines a constructor rejecting any Ethers sent with deployment of contract and has a function `reclaimEther` which sends the Ether balance of Pareto token contract to the owner address. Both reclaims, tokens and Ethers can be combined into a single function – An example of that is described below:
 
-                         `function claimTokens(address _token) onlyOwner {
+                         function claimTokens(address _token) onlyOwner {
                               if (_token == 0x0) { 
                               owner.transfer(this.balance); 
                               return; 
@@ -172,7 +172,7 @@ The Pareto token contract inherits a contract from OpenZepplin called `HasNoEthe
                               uint balance = token.balanceOf(this);
                               token.transfer(owner, balance); 
                               logTokenTransfer(_token, owner, balance); 
-                          }`
+                          }
 
 
 ##  6.4 Absence of ‘emit’ with events
@@ -180,9 +180,75 @@ The Pareto token contract inherits a contract from OpenZepplin called `HasNoEthe
 Firing events without the ‘emit’ keyword has been deprecated. The ‘emit’ keyword should be added preceding each event firing, so the contract complies to latest versions of Solidity.
 
 Example:
-      `emit Transfer(0x00, owner, totalSupply_);`
+                                `emit Transfer(0x00, owner, totalSupply_);`
       
 # 7 Line By Line Discussion
+
+##  7.1 Line 327
+
+The value of variable `distributionAddress` should be casted to `address` data-type.
+    
+      address distributionAddress = address( 0x005d6E4E4921904641Da66d4f05a023b70E89d58 )
+      
+##  7.2 Line 329 - 330
+
+Although, the `SafeMath` library is part of the contract, the value in `balances` mapping is not being updated using the library. The SafeMath library should be used here to avoid overflow of values.
+
+The final code would be as follows:
+
+
+                balances[owner] = balances[owner].sub(_value);
+                balances[distributionAddress] = balances[distributionAddress].add(_value);
+
+##  7.3 Line 331
+
+At line 331, there should be a `Transfer` event fired for the transfer of tokens from `owner` to `distributionAddress`.
+
+	        Transfer(owner, distributionAddress, _value); 
+
+As discussed above, without this event many exchanges would be showing the wrong token values for either `owner` or `distributionAddress` or both altogether. Blockchain explorer applications will also show wrong token values and transfers. It is a critical bug and must be fixed.
+
+##  7.4 Line 84
+
+For extra safety the `transfer` function should add a `msg.data.length` check so the short address attack can be avoided. As discussed in low level vulnerabilities, this function should also add the modifier `validDestination` to prevent transfers to 0x0 address or the Pareto smart contract to save tokens from being stuck.
+
+                function transfer(address _to, uint256 _value) public  validDestination(_to)
+                 onlyPayloadSize(2) returns (bool success) {
+                 //…   
+                }
+                
+##  7.5 Line 136
+
+The `transferFrom` function should also add a `msg.data.length` check so the short address attack could be guarded against. As discussed in low level vulnerabilities, this function should also add the modifier `validDestination` just like `transfer` function to prevent transfers to 0x0 address or the Pareto smart contract to save tokens from being stuck.
+
+
+           function transferFrom(address _from, address _to, uint256 _value) public validDestination(_to)
+           onlyPayloadSize(3) returns (bool success) {
+                //…   
+           }
+           
+##  7.6 Line 158
+
+The `approve` function should also add a `msg.data.length` check for the short address attack. The code to force user to set the approval to zero before setting a new nonzero value should be added as well.
+
+        function approve (address _spender, uint256 _value) onlyPayloadSize(2) 
+        returns (bool success) {
+        if ((_value != 0) && (allowance_of[msg.sender][_spender] != 0)) return false;
+
+        //…
+        }
+        
+# 8 Final Recommendation
+
+Our final recommendation would be to pay attention to the constructor of the contract where we are supposed to use `SafeMath` library when updating `balances` mapping and fire `Transfer` event when the token balance is transferred from `owner` to `distributionAddress`. 
+
+Apart from the minor vulnerabilities discussed in the audit, the contract is very secure and well written.
+
+
+
+
+
+
 
 
 
