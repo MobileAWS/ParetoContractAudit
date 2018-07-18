@@ -59,147 +59,130 @@ If an exploit of this nature were to succeed, it would arguably be the fault of 
 Further explanation of this attack is here: http://vessenes.com/the-erc20-short-address-attack-explained/
 
 
-### Testing and testability
+### 5.2.2 Double-spend on Approval
 
-This audit will examine how easily tested the code is, and review how thoroughly
-tested the code is.
+Imagine that Alice approves Mallory to spend 100 tokens. Later, Alice decides to approve Mallory to spend 150 tokens instead. If Mallory is monitoring pending transactions, then when she sees Alice’s new approval she can attempt to quickly spend 100 tokens, racing to get her transaction mined in before Alice’s new approval arrives. If her transaction beats Alice’s, then she can spend another 150 tokens after Alice’s transaction goes through.
 
-## About airswap
+This issue is a consequence of the ERC20 standard, which specifies that `approve()`takes a replacement value but no prior value. Preventing the attack while complying with ERC20 involves some compromise: users should set the approval to zero, make sure Mallory hasn’t snuck in a spend, then set the new value.
 
-airswap is a decentralised exchange that uses offchain signatures to authorise
-swaps of tokens between independent parties. Users are divided into 'makers' and
-'takers'; makers broadcast intent to trade and sign messages authorising
-trades, while takers agree to a specified trade by submitting it to the airswap
-contract.
+In general, this sort of attack is possible with functions which do not encode enough prior state; in this case, Alice’s baseline belief of Mallory’s outstanding spent token balance from the Mallory allowance.
 
-The airswap token contract provides an ERC20 compatible token contract, with additional features to lock up tokens for fixed periods.
+It’s possible for `approve()` to enforce this behavior without API changes in the ERC20 specification:
 
-## Terminology
+                `if ((_value != 0) && (approved[msg.sender][_spender] != 0)) return false;`
 
-This audit uses the following terminology.
+However, this is just an attempt to modify user behavior. If the user does attempt to change from one non-zero value to another, then the doublespend can still happen, since the attacker will set the value to zero.
 
-### Likelihood
+If desired, a nonstandard function can be added to minimize hassle for users. The issue can be fixed with minimal inconvenience by taking a change value rather than a replacement value:
 
-How likely a bug is to be encountered or exploited in the wild, as specified by the
-[OWASP risk rating methodology](https://www.owasp.org/index.php/OWASP_Risk_Rating_Methodology#Step_2:_Factors_for_Estimating_Likelihood).
+`function increaseApproval (address _spender, uint256 _addedValue) onlyPayloadSize(2) returns (bool success) {
+uint oldValue = approved[msg.sender][_spender];
+approved[msg.sender][_spender] = safeAdd(oldValue, _addedValue);
+return true;
+}`
 
-### Impact
+Even if this function is added, it’s important to keep the original for compatibility with the ERC20 specification.
 
-The impact a bug would have if exploited, as specified by the
-[OWASP risk rating methodology](https://www.owasp.org/index.php/OWASP_Risk_Rating_Methodology#Step_3:_Factors_for_Estimating_Impact).
+The likely impact of this bug is low for most situations.
 
-### Severity
+For more, see this discussion on github: https://github.com/ethereum/EIPs/issues/20#issuecomment-263524729
 
-How serious the issue is, derived from Likelihood and Impact as specified by the [OWASP risk rating methodology](https://www.owasp.org/index.php/OWASP_Risk_Rating_Methodology#Step_4:_Determining_the_Severity_of_the_Risk).
+### 5.2.3 Re-entrancy attack
 
-# Overview
+The Ether receiving fallback function of a contract can be used to re-enter the sending contract’s function and perform malicious activity if the code of calling contract is not secure such as the calling contract does not update its state before making an external contract or raw call to another contract.
 
-## Source Code
+The Pareto contract does not use `call.value()` for external calls but uses `send()` in `reclaimEther()` function, which is safe as there is no risk of re-entrancy attacks since the `send()` function only forwards `2,300 gas` to the `fallback` function of called contract. This amount of gas can only be used to log an event’s data and throw a failure. This way you’re unable to recursively call the sender function again, thus avoiding the re-entrancy attack.
 
-The airswap smart contract source code was made available in the [airswap/protocol](https://github.com/airswap/protocol/) Github repository.
 
-The code was audited as of commit `6bdee4e9ab0bfdb4e5af1cd2a0133294f037e269`.
 
-The following files were audited:
-```
-SHA1(contracts/AirSwapToken.sol)= 72a6aeb815c4e7a31de5730edd926b1f5b74769c
-SHA1(contracts/lib/StandardToken.sol)= 2d8310edcaaac100cc1a830f2506b0b1010af54e
-SHA1(contracts/lib/Token.sol)= 757c7ca8ea7169b04305f1c02b4965a1237f01d9
-```
+##  5.2 Low Vulnerabilities
 
-## General Notes
+### 5.3.1 Prevent token transfers to 0x0 address or the Pareto contract address
 
-The code is readable and was easy to audit, with well placed comments and small, clearly written functions. Several `require` conditions that were used in several places could have been refactored into modifiers for further clarity and less repetition of code.
+At the time of writing, the "zero" address (0x0000000000000000000000000000000000000000) holds tokens with a value of more than 80$ million. All of these tokens are burnt or lost. 
 
-We note that the token locking mechanism could be bypassed by creating a wrapping token that lacks the lock mechanism, and permits people to transfer tokens to and from the wrapping token contract. Whether this is a concern or not depends on the overall goals of the locking mechanism.
+The transfer of Pareto Network tokens to the Pareto token contract would also result in the tokens being stuck.
 
-It is also worth noting that the locking mechanism utilises a fixed lock-up period; this could be generalised to a variable lock-up period with no increase in complexity by simply making the `BalanceLock` structure store an unlock date instead of a lock date, and accepting an unlock date in the `lockTokens` function.
+An example of the potential for loss by leaving this open is the EOS token smart contract where more than 90,000 tokens are stuck at the contract address.
 
-## Contracts
+An example of implementing both the above recommendations would be to create the following modifier; validating that the "to" address is neither 0x0 nor the smart contract's own address:
 
-`AirSwapToken` implements the token functionality.
+`modifier validDestination( address to ) {
+        require(to != address(0x0));
+        require(to != address(this) );
+        _;
+    }`
 
-## Testing
+The modifier should then be applied to the "transfer" and "transferFrom" methods:
 
-A fairly complete set of unit tests is provided. Unit tests are clearly written
-and easy to follow. Happy cases are tested along with most simple failures.
+   `function transfer(address _to, uint _value)
+        validDestination(_to)
+        returns (bool) 
+    {
+        (... your logic ...)
+    }
 
-Notably, initial token lockup time is hardcoded into the token contract, rather than supplied as a cconstructor parameter, and is set to a fixed timestamp, which the tests validate. As a result, these unit tests will begin failing after the lockup period concludes. Tests should not depend on wallclock time, and this should be remedied by either using fake time, or making the token contract accept an unlock time as a constructor argument.
+    function transferFrom(address _from, address _to, uint _value)
+        validDestination(_to)
+        returns (bool) 
+    {
+        (... your logic ...)
+    }
+`
 
-Testing requires running a separate server process. No automated build is set up
-for the repository.
+#  6 General Comments
 
-We recommend setting up an automated build, so new commits can be vetted against
-the existing test suite.
+##  6.1 Use of ‘approve’ Function
 
-# Findings
+As mentioned earlier, the double spending problem resulting from the use `approve()` function, the Pareto token contract deals with it by introducing the functions `increaseApproval()` and `decreaseApproval()` for increasing and decreasing the approvals, respectively. Both of these functions eliminate the need to reassign allowance but the `approve()` function still does not protect against reassignment to a non-zero approved value if mistakenly called by the approver. The solution would be to force the user to first set the `allowance` value to zero before setting a non-zero new value.
 
-We found one note issue, four low issues, and one medium issue.
 
-## Note Issues
+ 
+             ` function approve (address _spender, uint256 _value)  returns (bool success) {
 
-### Choice of 8 decimal places
+              if ((_value != 0) && (allowance_of[msg.sender][_spender] != 0)) return false;
 
- - Likelihood: low
- - Severity: low
+              //...
 
-The token contract makes a seemingly arbitrary choice of 8 decimal places. While this is unlikely to cause significant issues, we recommend the consensus value of 18 decimal places, matching Ether and a majority of other tokens, absent any compelling reason to choose another value.
+              }
+              `
 
-## Low Issues
+##  6.2 Reclaiming Stranded Tokens
 
-### Use of `if(...) revert()` instead of `require`
+We recommend implementing the contract with the ability to call transfer on arbitrary ERC20 token contracts in case tokens are stranded there. 
 
- - Likelihood: medium
- - Severity: low
+As an example, the Pareto token contract has been sent Pareto (presumably accidentally). We generalize this to Peterson’s Law: “Tokens will be sent to the most inconvenient address possible.” 
 
-The `onlyAfter` modifier uses the `if(...) revert()` construction. Generally, using `require` is recommended instead, as it aids both readability and analysis by static analysis tools.
+The Pareto token contract does not have any mechanism to deal with stranded tokens.
 
-### Extending the locking period requires increasing number of locked tokens
+##  6.3 Reclaiming Stranded Ether
 
- - Likelihood: medium
- - Severity: low
+It is very rare but possible to see Ether sent to a contract that is not payable through use of the `selfdestruct` function. For this reason we recommend allowing all contracts that are not holding Ether for other reasons to allow the owner to withdraw the funds. 
 
-Because the only way to extend the locking period is calling `lockBalance`, and because this requires a `_value` argument greater than zero, users cannot extend the period for which their tokens are locked without also increasing the number of locked tokens.
+The Pareto token contract inherits a contract from OpenZepplin called `HasNoEther` which defines a constructor rejecting any Ethers sent with deployment of contract and has a function `reclaimEther` which sends the Ether balance of Pareto token contract to the owner address. Both reclaims, tokens and Ethers can be combined into a single function – An example of that is described below:
 
-We recommend either removing the `>0` check, or making the `_value` argument a total rather than a delta; this would have the additional benefit of making multiple calls to `lockBalance` and `unlockBalance` idempotent.
+                         `function claimTokens(address _token) onlyOwner {
+                              if (_token == 0x0) { 
+                              owner.transfer(this.balance); 
+                              return; 
+                              }
 
-### Expired token locks must be explicitly unlocked
 
- - Likelihood: medium
- - Severity: low
+                              Token token = Token(_token); 
+                              uint balance = token.balanceOf(this);
+                              token.transfer(owner, balance); 
+                              logTokenTransfer(_token, owner, balance); 
+                          }`
 
-Once a user's locked tokens have expired, they must manually call `unlockTokens` to make those tokens available for use.
 
-We recommend removing `unlockTokens` entirely, and instead creating a `spendableBalance` property that relevant functionality depends on to determine how many tokens can be spent.
+##  6.4 Absence of ‘emit’ with events
 
-An additional benefit of resolving this and the previous issue would be to allow users with expired locks to create new locks for a smaller number of tokens in a single operation.
+Firing events without the ‘emit’ keyword has been deprecated. The ‘emit’ keyword should be added preceding each event firing, so the contract complies to latest versions of Solidity.
 
-### `approve` function breaks ERC20
+Example:
+      `emit Transfer(0x00, owner, totalSupply_);`
+      
+# 7 Line By Line Discussion
 
- - Likelihood: low
- - Severity: medium
 
-The approve function throws if the caller attempts to change an approval unless either the previous approval amount or the new approval amount is zero. This is intended to prevent a known edge case with ERC20 approvals, but results in violating ERC20.
 
-The approvals race condition does not affect other contracts, which can read and adjust approvals in a single atomic operation, and calling contracts may be unaware of this check, which violates the interface specification laid out in ERC20. As a result, these contracts may be rendered unusable with this token.
-
-We recommend leaving out this check, and making it the responsibility of user software that issues approvals to responsibly zero them out and check them before reauthorisation.
-
-## Medium Issues
-
-### Callers have no way to determine when tokens become transferrable
-
- - Likelihood: medium
- - Severity: medium
-
-While the `balanceLocks` mapping is publicly readable, it stores the lock date of a user's tokens, rather than the unlock date. Further, the `lockingPeriod` variable is not publicly readable. As a result, external contracts have no way to know when tokens become transferrable, except by convention (Eg, out-of-band knowledge of the contract's locking period).
-
-We recommend either making `lockingPeriod` public, or preferably, making the `balanceLocks` date refer to the unlock date rather than the lock date.
-
-## High Issues
-
-None found.
-
-## Critical Issues
-
-None found.
