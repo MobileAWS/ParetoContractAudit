@@ -205,8 +205,8 @@ Although, the `SafeMath` library is part of the contract, the value in `balances
 The final code would be as follows:
 
 ```
-                balances[owner] = balances[owner].sub(_value);
-                balances[distributionAddress] = balances[distributionAddress].add(_value);
+balances[owner] = balances[owner].sub(_value);
+balances[distributionAddress] = balances[distributionAddress].add(_value);
 ```
 
 ##  7.3 Line 331
